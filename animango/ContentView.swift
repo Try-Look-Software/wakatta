@@ -23,7 +23,7 @@ struct ContentView: View {
             }
 
             Tab("Translate", systemImage: "waveform.and.mic") {
-                LiveTranslationView()
+                TranslateContainerView()
             }
 
             Tab("Profile", systemImage: "person.crop.circle") {
