@@ -57,7 +57,12 @@ final class ContentGenerationService {
 
             // Step 2: Persist Jisho vocabulary
             generationProgress = "Saving vocabulary..."
-            persistJishoVocabulary(jishoWords, episodeID: episode.id, modelContext: modelContext)
+            persistJishoVocabulary(
+                jishoWords,
+                episodeID: episode.id,
+                mediaExternalID: media.externalID,
+                modelContext: modelContext
+            )
 
             // Step 3: Generate lessons with configured LLM
             if llmManager.isAvailable {
@@ -71,7 +76,12 @@ final class ContentGenerationService {
 
                 // Step 4: Persist generated content
                 generationProgress = "Saving lessons..."
-                persistGeneratedContent(content, episodeID: episode.id, modelContext: modelContext)
+                persistGeneratedContent(
+                    content,
+                    episodeID: episode.id,
+                    mediaExternalID: media.externalID,
+                    modelContext: modelContext
+                )
             } else {
                 // Tier 3: Jisho-only fallback lessons
                 generationProgress = "Creating lessons from vocabulary..."
@@ -99,6 +109,7 @@ final class ContentGenerationService {
     private func persistJishoVocabulary(
         _ words: [JishoService.JishoWord],
         episodeID: String,
+        mediaExternalID: String,
         modelContext: ModelContext
     ) {
         for jishoWord in words {
@@ -133,6 +144,22 @@ final class ContentGenerationService {
                 )
                 modelContext.insert(link)
             }
+
+            linkVocabularyToMedia(word: data.word, mediaExternalID: mediaExternalID, modelContext: modelContext)
+        }
+    }
+
+    private func linkVocabularyToMedia(word: String, mediaExternalID: String, modelContext: ModelContext) {
+        let mediaID = mediaExternalID
+        let predicate = #Predicate<MediaVocabulary> {
+            $0.mediaExternalID == mediaID && $0.vocabularyWord == word
+        }
+        if (try? modelContext.fetch(FetchDescriptor(predicate: predicate)))?.isEmpty ?? true {
+            modelContext.insert(MediaVocabulary(
+                mediaExternalID: mediaExternalID,
+                vocabularyWord: word,
+                frequency: 1
+            ))
         }
     }
 
@@ -141,6 +168,7 @@ final class ContentGenerationService {
     private func persistGeneratedContent(
         _ content: LLMGeneratedContent,
         episodeID: String,
+        mediaExternalID: String,
         modelContext: ModelContext
     ) {
         // Persist additional vocabulary from AI generation
@@ -172,6 +200,8 @@ final class ContentGenerationService {
                 )
                 modelContext.insert(link)
             }
+
+            linkVocabularyToMedia(word: vocabItem.word, mediaExternalID: mediaExternalID, modelContext: modelContext)
         }
 
         // Persist lessons and exercises
@@ -208,6 +238,18 @@ final class ContentGenerationService {
                     grammarPattern: generatedLesson.grammarPattern
                 )
                 modelContext.insert(grammarLink)
+            }
+
+            // Media link (the media Grammar list reads these)
+            let mediaID = mediaExternalID
+            let mediaGrammarPredicate = #Predicate<MediaGrammar> {
+                $0.mediaExternalID == mediaID && $0.grammarPattern == pattern
+            }
+            if (try? modelContext.fetch(FetchDescriptor(predicate: mediaGrammarPredicate)))?.isEmpty ?? true {
+                modelContext.insert(MediaGrammar(
+                    mediaExternalID: mediaExternalID,
+                    grammarPattern: generatedLesson.grammarPattern
+                ))
             }
 
             // Create lesson
