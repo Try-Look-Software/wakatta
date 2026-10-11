@@ -3,7 +3,7 @@
 ## 1. One-time setup
 1. Sign in at https://chrome.google.com/webstore/devconsole with the Google account that will own the listing.
 2. Pay the one-time **$5 developer registration fee** and verify your email.
-3. Privacy policy URL: https://jeffnamkung.github.io/wakatta/kotolens/privacy.html (served from `docs/kotolens/` in the wakatta repo).
+3. Privacy policy URL: https://try-look-software.github.io/wakatta/kotolens/privacy.html (served from `docs/kotolens/` in the wakatta repo).
 
 ## 2. Build the package
 ```bash
@@ -52,7 +52,7 @@ Paste the copy from `store/listing.md`. Upload the 128×128 icon (`src/icons/ico
 
 Then certify: not sold to third parties; not used for purposes unrelated to the single purpose; not used for creditworthiness or lending.
 
-**Privacy policy URL:** https://jeffnamkung.github.io/wakatta/kotolens/privacy.html
+**Privacy policy URL:** https://try-look-software.github.io/wakatta/kotolens/privacy.html
 
 ### Distribution
 Choose Public (or Unlisted for a soft launch) and your regions.
