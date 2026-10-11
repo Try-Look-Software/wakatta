@@ -1,0 +1,6 @@
+.claude/settings.local.json
+xcuserdata/
+DerivedData/
+node_modules/
+chrome-extension/dist/
+.DS_Store
