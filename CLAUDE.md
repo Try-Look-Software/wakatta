@@ -86,6 +86,8 @@ The `protect-main` ruleset requires the `Build and unit test` and `npm test` che
 
 Neither workflow uses secrets.
 
+`.github/workflows/claude.yml` runs Claude Code when an issue or comment mentions `@claude`. It uses the `CLAUDE_CODE_OAUTH_TOKEN` secret and the Claude GitHub App token, which is scoped to this repository. When it finishes work on a new branch, it opens the PR itself with `gh pr create --repo <this repo>` instead of posting a link. Its only allowed Bash commands are `gh pr create`, `gh pr list` and `gh pr view` (set in `claude_args`). Don't set the action's `prompt` input, because that switches it to automation mode and stops it responding to `@claude`.
+
 ## Rules
 
 - Always build and run the relevant tests before declaring a task done.
