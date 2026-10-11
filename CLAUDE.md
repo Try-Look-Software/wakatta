@@ -77,10 +77,12 @@ Key constraints from the design:
 
 ## CI
 
-GitHub Actions runs on pull requests to `main` and pushes to `main`, filtered by path:
+GitHub Actions runs on pull requests to `main` and pushes to `main`:
 
-- `.github/workflows/ios.yml` runs on changes to `animango/`, the Xcode project, or the test folders. It uses the `macos-26` runner with Xcode 26.3 pinned through `DEVELOPER_DIR` (the iOS 26.2 SDK) and runs `-only-testing:animangoTests` on `iPhone 17 Pro, OS=26.2`. When bumping the deployment target, confirm in the runner image README (actions/runner-images) that the Xcode version and simulator exist on the image.
-- `.github/workflows/chrome-extension.yml` runs on changes to `chrome-extension/`. It runs `npm ci` and `npm test` on `ubuntu-latest` with Node 24.
+- `.github/workflows/ios.yml` runs on every PR and push so that the required `Build and unit test` check always reports. That check is a small gate job on Ubuntu. A `Detect iOS changes` job diffs the commit, and the macOS job (`iOS build and test (macOS)`) only runs when `animango/`, the Xcode project, the test folders, or `ios.yml` changed; otherwise the gate passes in seconds. Don't add a `paths:` filter to this workflow, or PRs that skip it can't merge. The macOS job uses the `macos-26` runner with Xcode 26.3 pinned through `DEVELOPER_DIR` (the iOS 26.2 SDK) and runs `-only-testing:animangoTests` on `iPhone 17 Pro, OS=26.2`. When bumping the deployment target, confirm in the runner image README (actions/runner-images) that the Xcode version and simulator exist on the image.
+- `.github/workflows/chrome-extension.yml` runs on every PR and push with no path filter, because its `npm test` job is a required check and takes only about 10 seconds. It runs `npm ci` and `npm test` on `ubuntu-latest` with Node 24.
+
+The `protect-main` ruleset requires the `Build and unit test` and `npm test` checks. A required check must report on every PR, so if you rename a job or add a required check, update the ruleset to match and make sure the job never gets skipped by path filters.
 
 Neither workflow uses secrets.
 
