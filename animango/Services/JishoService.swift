@@ -1,8 +1,12 @@
 import Foundation
 
 actor JishoService {
-    private let client = APIClient()
+    private let client: APIClient
     private var lastRequestTime: Date?
+
+    init(client: APIClient = APIClient()) {
+        self.client = client
+    }
 
     // MARK: - Jisho API Response DTOs
 
