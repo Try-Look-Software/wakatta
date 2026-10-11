@@ -6,6 +6,8 @@
     <string>Wakatta</string>
     <key>CFBundleDisplayName</key>
     <string>Wakatta</string>
+    <key>ITSAppUsesNonExemptEncryption</key>
+    <false/>
     <key>NSAppTransportSecurity</key>
     <dict>
         <key>NSExceptionDomains</key>
