@@ -1,16 +1,12 @@
 name: Chrome extension
 
+# No paths filter: "npm test" is a required check, so it must report on every PR.
+# The job takes about 10 seconds, so it simply always runs.
 on:
   pull_request:
     branches: [main]
-    paths:
-      - "chrome-extension/**"
-      - ".github/workflows/chrome-extension.yml"
   push:
     branches: [main]
-    paths:
-      - "chrome-extension/**"
-      - ".github/workflows/chrome-extension.yml"
 
 permissions:
   contents: read

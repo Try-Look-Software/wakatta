@@ -1,22 +1,13 @@
 name: iOS
 
+# Runs on every PR and push to main so the required "Build and unit test" check
+# always reports. The macOS build only runs when iOS files change; otherwise the
+# check passes in seconds.
 on:
   pull_request:
     branches: [main]
-    paths:
-      - "animango/**"
-      - "animango.xcodeproj/**"
-      - "animangoTests/**"
-      - "animangoUITests/**"
-      - ".github/workflows/ios.yml"
   push:
     branches: [main]
-    paths:
-      - "animango/**"
-      - "animango.xcodeproj/**"
-      - "animangoTests/**"
-      - "animangoUITests/**"
-      - ".github/workflows/ios.yml"
 
 permissions:
   contents: read
@@ -26,8 +17,46 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  changes:
+    name: Detect iOS changes
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      ios: ${{ steps.filter.outputs.ios }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - id: filter
+        env:
+          EVENT: ${{ github.event_name }}
+          BEFORE: ${{ github.event.before }}
+        run: |
+          if [ "$EVENT" = "pull_request" ]; then
+            # The PR checkout is a merge commit; its first parent is the base branch.
+            base="HEAD^1"
+          else
+            base="$BEFORE"
+          fi
+          if ! git rev-parse --verify --quiet "${base}^{commit}" >/dev/null; then
+            echo "No usable base commit ($base); running the full iOS build."
+            echo "ios=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          changed=$(git diff --name-only "$base" HEAD)
+          echo "Changed files:"
+          echo "$changed"
+          if echo "$changed" | grep -qE '^(animango/|animango\.xcodeproj/|animangoTests/|animangoUITests/|\.github/workflows/ios\.yml$)'; then
+            echo "ios=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "ios=false" >> "$GITHUB_OUTPUT"
+          fi
+
   test:
-    name: Build and unit test
+    name: iOS build and test (macOS)
+    needs: changes
+    if: needs.changes.outputs.ios == 'true'
     # macos-26 (arm64) ships Xcode 26.3, whose iOS 26.2 SDK matches the deployment target.
     runs-on: macos-26
     timeout-minutes: 30
@@ -50,3 +79,27 @@ jobs:
             -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.2' \
             -only-testing:animangoTests \
             CODE_SIGNING_ALLOWED=NO
+
+  # The required status check. It always runs, and fails unless change detection
+  # succeeded and the macOS job either passed or was skipped because nothing iOS changed.
+  status:
+    name: Build and unit test
+    needs: [changes, test]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - env:
+          CHANGES_RESULT: ${{ needs.changes.result }}
+          IOS_CHANGED: ${{ needs.changes.outputs.ios }}
+          TEST_RESULT: ${{ needs.test.result }}
+        run: |
+          echo "changes=$CHANGES_RESULT ios_changed=$IOS_CHANGED test=$TEST_RESULT"
+          if [ "$CHANGES_RESULT" != "success" ]; then
+            echo "Change detection did not succeed."; exit 1
+          fi
+          if [ "$IOS_CHANGED" = "true" ]; then
+            [ "$TEST_RESULT" = "success" ] || { echo "iOS build and test did not pass."; exit 1; }
+          else
+            echo "No iOS changes; skipping the macOS build."
+          fi
