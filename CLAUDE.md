@@ -88,6 +88,24 @@ Neither workflow uses secrets.
 
 `.github/workflows/claude.yml` runs Claude Code when an issue or comment mentions `@claude`. It uses the `CLAUDE_CODE_OAUTH_TOKEN` secret and the Claude GitHub App token, which is scoped to this repository. When it finishes work on a new branch, it opens the PR itself with `gh pr create --repo <this repo>` instead of posting a link. Its only allowed Bash commands are `gh pr create`, `gh pr list` and `gh pr view` (set in `claude_args`). Don't set the action's `prompt` input, because that switches it to automation mode and stops it responding to `@claude`.
 
+## Releases
+
+Versions use three parts, `X.Y.Z`. The current `MARKETING_VERSION = 1.2` counts as `1.2.0`; write all three parts from the next release on.
+
+A version is released once it has a git tag `vX.Y.Z` on the commit that shipped. Tag a version only when the user says it shipped. Versions 1.0 and 1.1 shipped before tagging started, so they have no tags but still count as released.
+
+To start a new release:
+
+1. Choose the next version from the current `MARKETING_VERSION`:
+   - **Patch** (`X.Y.Z+1`) for bug fixes.
+   - **Minor** (`X.Y+1.0`) for features.
+   - **Major** (`X+1.0.0`) only when the user explicitly asks for it.
+
+   If it's unclear whether the release is fixes or features, ask.
+2. Never reuse a version that has already been released. Check `git fetch --tags && git tag -l 'v*'`, and stop and ask if the version is already tagged or is 1.0 or 1.1.
+3. On a new branch, set `MARKETING_VERSION` to the new version in every configuration of the `animango` target (Debug and Release in `animango.xcodeproj/project.pbxproj`). Change nothing else: not `CURRENT_PROJECT_VERSION`, not the test targets.
+4. Open a PR titled `Start release X.Y.Z`.
+
 ## Rules
 
 - Always build and run the relevant tests before declaring a task done.
