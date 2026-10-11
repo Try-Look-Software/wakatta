@@ -26,10 +26,10 @@ xcodebuild -project animango.xcodeproj -scheme animango -destination 'platform=i
 xcodebuild -project animango.xcodeproj -scheme animango -destination 'platform=iOS Simulator,name=iPhone 17 Pro' test
 
 # A single test (Target/Suite/test)
-xcodebuild -project animango.xcodeproj -scheme animango -destination 'platform=iOS Simulator,name=iPhone 17 Pro' test -only-testing:animangoTests/animangoTests/example
+xcodebuild -project animango.xcodeproj -scheme animango -destination 'platform=iOS Simulator,name=iPhone 17 Pro' test -only-testing:animangoTests/SRSEngineTests/correctAnswersFollowSM2Schedule
 ```
 
-Unit tests use Swift Testing (`import Testing`, `@Test`, `#expect`), not XCTest. Test coverage is currently placeholder only.
+Unit tests use Swift Testing (`import Testing`, `@Test`, `#expect`), not XCTest. Unit tests cover `SRSEngine` and `ComprehensionCalculator`; SwiftData tests use an in-memory `ModelContainer`. Suspected bugs are recorded with `withKnownIssue` rather than fixed in a test PR.
 
 ### Project settings that matter
 
@@ -74,6 +74,15 @@ Key constraints from the design:
 - Users bring their own API key. `src/lib/settings.js` keeps it in `chrome.storage.local` (never synced) while other settings use `chrome.storage.sync`; keep that split.
 - Pages where scripts can't run (chrome://, the Web Store, the PDF viewer) fall back to a standalone window.
 - Store listing and publishing steps are in `store/` (`PUBLISHING.md`).
+
+## CI
+
+GitHub Actions runs on pull requests to `main` and pushes to `main`, filtered by path:
+
+- `.github/workflows/ios.yml` runs on changes to `animango/`, the Xcode project, or the test folders. It uses the `macos-26` runner with Xcode 26.3 pinned through `DEVELOPER_DIR` (the iOS 26.2 SDK) and runs `-only-testing:animangoTests` on `iPhone 17 Pro, OS=26.2`. When bumping the deployment target, confirm in the runner image README (actions/runner-images) that the Xcode version and simulator exist on the image.
+- `.github/workflows/chrome-extension.yml` runs on changes to `chrome-extension/`. It runs `npm ci` and `npm test` on `ubuntu-latest` with Node 24.
+
+Neither workflow uses secrets.
 
 ## Rules
 

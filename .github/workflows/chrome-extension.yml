@@ -1,0 +1,41 @@
+name: Chrome extension
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "chrome-extension/**"
+      - ".github/workflows/chrome-extension.yml"
+  push:
+    branches: [main]
+    paths:
+      - "chrome-extension/**"
+      - ".github/workflows/chrome-extension.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: npm test
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: chrome-extension
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: chrome-extension/package-lock.json
+
+      - run: npm ci
+
+      - run: npm test
