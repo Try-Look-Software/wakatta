@@ -1,0 +1,52 @@
+name: iOS
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "animango/**"
+      - "animango.xcodeproj/**"
+      - "animangoTests/**"
+      - "animangoUITests/**"
+      - ".github/workflows/ios.yml"
+  push:
+    branches: [main]
+    paths:
+      - "animango/**"
+      - "animango.xcodeproj/**"
+      - "animangoTests/**"
+      - "animangoUITests/**"
+      - ".github/workflows/ios.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Build and unit test
+    # macos-26 (arm64) ships Xcode 26.3, whose iOS 26.2 SDK matches the deployment target.
+    runs-on: macos-26
+    timeout-minutes: 30
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_26.3.app/Contents/Developer
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Show toolchain
+        run: |
+          xcodebuild -version
+          xcrun simctl list devices available "iOS 26.2"
+
+      - name: Build and test
+        run: |
+          set -o pipefail
+          xcodebuild test \
+            -project animango.xcodeproj \
+            -scheme animango \
+            -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.2' \
+            -only-testing:animangoTests \
+            CODE_SIGNING_ALLOWED=NO
