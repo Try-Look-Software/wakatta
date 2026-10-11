@@ -40,11 +40,17 @@ jobs:
           additional_permissions: |
             actions: read
 
-          # Optional: Give a custom prompt to Claude. If this is not specified, Claude will perform the instructions specified in the comment that tagged it.
-          # prompt: 'Update the pull request description to include a summary of changes.'
-
-          # Optional: Add claude_args to customize behavior and configuration
+          # Don't set `prompt`: it switches the action to automation mode and
+          # stops it responding to @claude comments. Instructions are appended
+          # to the default prompt instead.
+          #
+          # Claude opens its own PRs with gh. The only Bash commands allowed are
+          # these gh pr subcommands. gh authenticates with the action's GitHub
+          # App token, which is scoped to this repository (contents, pull
+          # requests and issues write, plus actions read from
+          # additional_permissions above), and --repo pins every call to it.
           # See https://github.com/anthropics/claude-code-action/blob/main/docs/usage.md
-          # or https://code.claude.com/docs/en/cli-reference for available options
-          # claude_args: '--allowed-tools Bash(gh pr *)'
+          claude_args: |
+            --allowedTools "Bash(gh pr create:*),Bash(gh pr list:*),Bash(gh pr view:*)"
+            --append-system-prompt "When you finish a task on a new branch, open the pull request yourself instead of posting a Create PR link. Do not post the compare or quick_pull link. First run gh pr list --repo ${{ github.repository }} --head <your branch> --state open, and if a PR already exists, link that one instead of creating another. Otherwise run gh pr create --repo ${{ github.repository }} --base <base branch> --head <your branch> --title <title> --body <body>. In the body, summarize the change, say how it was tested, and add Closes #<issue number> when the work came from an issue. Then put the PR URL in your comment. If gh pr create fails, say so in your comment and include the error. Only fall back to the Create PR link in that case."
 
