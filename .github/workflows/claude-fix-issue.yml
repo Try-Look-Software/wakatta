@@ -1,0 +1,63 @@
+name: Claude fix issue
+
+# Every new issue from someone with write access starts Claude on a macOS runner.
+# Claude fixes it on a new branch, builds and runs the tests, and opens a PR that
+# closes the issue. Issues that mention @claude go to claude.yml instead.
+on:
+  issues:
+    types: [opened]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.issue.number }}
+  cancel-in-progress: false
+
+jobs:
+  fix:
+    # The repo is public, so skip issues from people without write access before
+    # a runner starts. The action checks write access again itself.
+    if: |
+      contains(fromJSON('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.issue.author_association) &&
+      !contains(github.event.issue.body, '@claude') &&
+      !contains(github.event.issue.title, '@claude')
+    # Same runner and Xcode as ios.yml, so Claude's test run matches CI.
+    runs-on: macos-26
+    timeout-minutes: 60
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_26.3.app/Contents/Developer
+    permissions:
+      contents: read
+      pull-requests: read
+      issues: read
+      id-token: write
+      actions: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Run Claude Code
+        uses: anthropics/claude-code-action@v1
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+
+          additional_permissions: |
+            actions: read
+
+          # Setting `prompt` runs the action in agent mode, which needs no @claude
+          # trigger. Writes use the Claude GitHub App token, so its PRs run CI.
+          prompt: |
+            Issue #${{ github.event.issue.number }} was just opened in ${{ github.repository }}. Treat it as a bug report or small task for this repo and fix it.
+
+            1. Read it with: gh issue view ${{ github.event.issue.number }} --repo ${{ github.repository }} --comments
+            2. If it isn't actionable, or you'd have to guess at what's wanted, don't change code. Post a comment with gh issue comment asking the specific questions you need answered, then stop.
+            3. Otherwise create a branch named claude/issue-${{ github.event.issue.number }}-<short-slug> and make the smallest change that fixes the issue. Follow CLAUDE.md.
+            4. Build and run the relevant tests before committing:
+               - iOS app: set -o pipefail && xcodebuild test -project animango.xcodeproj -scheme animango -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.2' -only-testing:animangoTests CODE_SIGNING_ALLOWED=NO
+               - Chrome extension: cd chrome-extension && npm ci && npm test
+               Add or update a unit test that covers the fix when the code is testable. If the build or tests fail and you can't fix them, still open the PR as a draft (gh pr create --draft) and say what fails.
+            5. Commit, push the branch, and check for an existing PR with gh pr list --repo ${{ github.repository }} --head <branch> --state open. If there isn't one, run gh pr create --repo ${{ github.repository }} --base main --head <branch> --title <title> --body <body>. The body must include: Closes #${{ github.event.issue.number }}, what was wrong, what changed, how it was tested (the commands and results), and how to verify the fix on a phone once the TestFlight build arrives.
+            6. Comment on the issue with gh issue comment, linking the PR.
+
+          claude_args: |
+            --allowedTools "Read,Edit,Write,Glob,Grep,Bash(git checkout:*),Bash(git switch:*),Bash(git status:*),Bash(git diff:*),Bash(git log:*),Bash(git add:*),Bash(git rm:*),Bash(git mv:*),Bash(git commit:*),Bash(git push:*),Bash(xcodebuild:*),Bash(set -o pipefail && xcodebuild:*),Bash(xcrun simctl list:*),Bash(cd chrome-extension && npm:*),Bash(npm ci:*),Bash(npm test:*),Bash(npm run build:*),Bash(node --test:*),Bash(gh issue view:*),Bash(gh issue comment:*),Bash(gh pr create:*),Bash(gh pr list:*),Bash(gh pr view:*)"
