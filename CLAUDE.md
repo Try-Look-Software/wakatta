@@ -86,6 +86,14 @@ The `protect-main` ruleset requires the `Build and unit test` and `npm test` che
 
 Neither workflow uses secrets.
 
+Bug fixes flow from an issue to the App Store through three more workflows:
+
+- `.github/workflows/claude-fix-issue.yml` runs Claude on `macos-26` for every new issue from someone with write access (issues that mention `@claude` go to `claude.yml` instead). It sets `prompt`, which runs the action in agent mode: Claude fixes the issue on a `claude/issue-N-*` branch, runs the build and tests, opens a PR with `Closes #N`, and links it on the issue. If the issue is unclear, it asks on the issue instead.
+- `.github/workflows/testflight.yml` archives the `animango` scheme and uploads it to TestFlight on every push to `main` that changes iOS files, and can be run by hand. The build number is a UTC timestamp (`YYYYMMDDHHMM`) passed as `CURRENT_PROJECT_VERSION` at archive time; the committed value stays as it is.
+- `.github/workflows/app-store-submit.yml` is run by hand. It uses fastlane `deliver` to submit a TestFlight build of the current `MARKETING_VERSION` for review, with automatic release on approval. Once that version is approved, TestFlight rejects new uploads for it, so start the next release before merging more fixes. This workflow doesn't create a release tag; tag only when the user says the version shipped.
+
+The TestFlight and submit workflows use the `ASC_KEY_ID`, `ASC_ISSUER_ID` and `ASC_KEY_P8` secrets from an App Store Connect API key with the Admin role, and fail with a clear error when they're missing.
+
 `.github/workflows/claude.yml` runs Claude Code when an issue or comment mentions `@claude`. It uses the `CLAUDE_CODE_OAUTH_TOKEN` secret and the Claude GitHub App token, which is scoped to this repository. When it finishes work on a new branch, it opens the PR itself with `gh pr create --repo <this repo>` instead of posting a link. Its only allowed Bash commands are `gh pr create`, `gh pr list` and `gh pr view` (set in `claude_args`). Don't set the action's `prompt` input, because that switches it to automation mode and stops it responding to `@claude`.
 
 ## Releases

@@ -1,0 +1,116 @@
+name: Submit to App Store
+
+# Run by hand (Actions tab, or the GitHub mobile app) once you've checked a
+# TestFlight build. It submits that build for App Store review and releases it
+# automatically when Apple approves it. Uses the same secrets as testflight.yml.
+#
+# The App Store version is MARKETING_VERSION of the animango target. Once that
+# version is approved, TestFlight rejects new uploads for it, so start the next
+# release (see Releases in CLAUDE.md) before merging more fixes.
+on:
+  workflow_dispatch:
+    inputs:
+      release_notes:
+        description: "What's New text"
+        required: true
+        default: "Bug fixes and improvements."
+      build_number:
+        description: "TestFlight build number to submit (blank for the latest build of this version)"
+        required: false
+        default: ""
+      locale:
+        description: "App Store locale for the What's New text"
+        required: true
+        default: "en-US"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
+jobs:
+  submit:
+    name: Submit for App Store review
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      BUNDLE_ID: justforfun.animango
+      ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+      ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+      ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 }}
+      RELEASE_NOTES: ${{ inputs.release_notes }}
+      BUILD_NUMBER: ${{ inputs.build_number }}
+      LOCALE: ${{ inputs.locale }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: "3.4"
+
+      - name: Install fastlane
+        run: gem install fastlane --no-document
+
+      - name: Prepare key, version and release notes
+        run: |
+          if [ -z "$ASC_KEY_ID" ] || [ -z "$ASC_ISSUER_ID" ] || [ -z "$ASC_KEY_P8" ]; then
+            echo "::error::Set the ASC_KEY_ID, ASC_ISSUER_ID and ASC_KEY_P8 repo secrets."
+            exit 1
+          fi
+          python3 - <<'EOF'
+          import json, os, re
+          tmp = os.environ["RUNNER_TEMP"]
+          with open(f"{tmp}/asc_key.json", "w") as f:
+              json.dump({
+                  "key_id": os.environ["ASC_KEY_ID"],
+                  "issuer_id": os.environ["ASC_ISSUER_ID"],
+                  "key": os.environ["ASC_KEY_P8"],
+                  "in_house": False,
+              }, f)
+          # MARKETING_VERSION from the build settings that carry the app's bundle ID.
+          pbxproj = open("animango.xcodeproj/project.pbxproj").read()
+          versions = {
+              m.group(1)
+              for block in re.findall(r"buildSettings = \{(.*?)\n\t\t\t\};", pbxproj, re.S)
+              if re.search(r"PRODUCT_BUNDLE_IDENTIFIER = " + re.escape(os.environ["BUNDLE_ID"]) + ";", block)
+              for m in [re.search(r"MARKETING_VERSION = ([^;]+);", block)] if m
+          }
+          if len(versions) != 1:
+              raise SystemExit(f"Expected one MARKETING_VERSION for {os.environ['BUNDLE_ID']}, found {sorted(versions)}")
+          with open(os.environ["GITHUB_ENV"], "a") as f:
+              f.write(f"APP_VERSION={versions.pop()}\n")
+          notes_dir = f"{tmp}/metadata/{os.environ['LOCALE']}"
+          os.makedirs(notes_dir)
+          with open(f"{notes_dir}/release_notes.txt", "w") as f:
+              f.write(os.environ["RELEASE_NOTES"])
+          EOF
+
+      - name: Submit for review
+        run: |
+          build_args=()
+          if [ -n "$BUILD_NUMBER" ]; then
+            build_args=(--build_number "$BUILD_NUMBER")
+          fi
+          fastlane deliver \
+            --api_key_path "$RUNNER_TEMP/asc_key.json" \
+            --app_identifier "$BUNDLE_ID" \
+            --app_version "$APP_VERSION" \
+            "${build_args[@]}" \
+            --metadata_path "$RUNNER_TEMP/metadata" \
+            --skip_binary_upload true \
+            --skip_screenshots true \
+            --submit_for_review true \
+            --automatic_release true \
+            --run_precheck_before_submit false \
+            --submission_information '{"add_id_info_uses_idfa": false}' \
+            --force true
+          {
+            echo "### Submitted animango $APP_VERSION for App Store review"
+            echo "Build: ${BUILD_NUMBER:-latest for $APP_VERSION}. It releases automatically once Apple approves it."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Remove App Store Connect key
+        if: always()
+        run: rm -f "$RUNNER_TEMP/asc_key.json"
