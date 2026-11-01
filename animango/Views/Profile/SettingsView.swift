@@ -40,6 +40,9 @@ struct SettingsView: View {
                 }
             }
 
+            // The pipeline monitor can trigger backend jobs, so keep it out of
+            // App Store and TestFlight (Release) builds.
+            #if DEBUG
             Section("Server") {
                 NavigationLink {
                     PipelineMonitorView()
@@ -47,6 +50,7 @@ struct SettingsView: View {
                     Label("Pipeline Monitor", systemImage: "server.rack")
                 }
             }
+            #endif
 
             Section("About") {
                 HStack {
