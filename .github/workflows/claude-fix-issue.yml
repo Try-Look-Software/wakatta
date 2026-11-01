@@ -1,8 +1,10 @@
 name: Claude fix issue
 
 # Every new issue from someone with write access starts Claude on a macOS runner.
-# Claude fixes it on a new branch, builds and runs the tests, and opens a PR that
-# closes the issue. Issues that mention @claude go to claude.yml instead.
+# Claude triages it to this repo, the backend (Try-Look-Software/animango-backend)
+# or both. App fixes become a PR here that closes the issue; backend fixes become
+# an issue in the backend repo, whose own agent opens the PR, and merging that PR
+# deploys it. Issues that mention @claude go to claude.yml instead.
 on:
   issues:
     types: [opened]
@@ -24,6 +26,10 @@ jobs:
     timeout-minutes: 60
     env:
       DEVELOPER_DIR: /Applications/Xcode_26.3.app/Contents/Developer
+      # Fine-grained token limited to animango-backend (Contents: read,
+      # Issues: read and write). Without it, Claude triages from this repo
+      # alone and can't file backend issues.
+      BACKEND_REPO_TOKEN: ${{ secrets.BACKEND_REPO_TOKEN }}
     permissions:
       contents: read
       pull-requests: read
@@ -36,6 +42,22 @@ jobs:
         with:
           fetch-depth: 1
 
+      # A read-only copy of the backend so Claude can tell whether a bug is in
+      # the app or the pipeline. Git ignores it, so it can't end up in a commit.
+      - name: Checkout backend for triage
+        if: env.BACKEND_REPO_TOKEN != ''
+        uses: actions/checkout@v4
+        with:
+          repository: Try-Look-Software/animango-backend
+          token: ${{ secrets.BACKEND_REPO_TOKEN }}
+          path: .backend
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Keep the backend copy out of git
+        if: env.BACKEND_REPO_TOKEN != ''
+        run: echo "/.backend/" >> .git/info/exclude
+
       - name: Run Claude Code
         uses: anthropics/claude-code-action@v1
         with:
@@ -47,17 +69,22 @@ jobs:
           # Setting `prompt` runs the action in agent mode, which needs no @claude
           # trigger. Writes use the Claude GitHub App token, so its PRs run CI.
           prompt: |
-            Issue #${{ github.event.issue.number }} was just opened in ${{ github.repository }}. Treat it as a bug report or small task for this repo and fix it.
+            Issue #${{ github.event.issue.number }} was just opened in ${{ github.repository }}. Treat it as a bug report or small task and fix it.
 
             1. Read it with: gh issue view ${{ github.event.issue.number }} --repo ${{ github.repository }} --comments
             2. If it isn't actionable, or you'd have to guess at what's wanted, don't change code. Post a comment with gh issue comment asking the specific questions you need answered, then stop.
-            3. Otherwise create a branch named claude/issue-${{ github.event.issue.number }}-<short-slug> and make the smallest change that fixes the issue. Follow CLAUDE.md.
-            4. Build and run the relevant tests before committing:
+            3. Triage: decide whether the fix belongs in this repo (the iOS app or the Chrome extension), in the backend, or both. A read-only copy of the backend (Try-Look-Software/animango-backend: the FastAPI server and the content pipeline that discovers shows, downloads subtitles and extracts vocab, kanji and grammar) is in .backend/. Read .backend/CLAUDE.md, and trace the bug through the app's backend calls in animango/Services/AnimangoAPIService.swift. Typical backend bugs: wrong or missing vocab, kanji or grammar for content the backend served; shows or episodes that never become available; API errors or bad responses; the pipeline stalling. Never edit, add or commit anything under .backend/. If .backend/ doesn't exist, triage from this repo alone.
+               - App only: continue with step 4.
+               - Backend only: don't change this repo. File a backend issue with .github/scripts/file-backend-issue.sh "<title>" "<body>". The body must start with "Reported in Try-Look-Software/wakatta#${{ github.event.issue.number }}. The fix PR should also close it: add Closes Try-Look-Software/wakatta#${{ github.event.issue.number }}." Then give your diagnosis: the symptom, the likely cause with backend file and function names, the fix you suggest, and how to check it after it deploys. Then comment on this issue with gh issue comment, linking the backend issue and saying the fix deploys automatically once its PR merges. Stop there.
+               - Both: file the backend issue the same way, but have the body say the app side is handled in Try-Look-Software/wakatta#${{ github.event.issue.number }} and that the backend PR must not close it. Then fix the app side here (step 4 on). In the PR body, link the backend issue, and if the app change relies on the backend change, say to merge it only after the backend fix has deployed.
+               If the script fails (for example, no token), comment on this issue with your diagnosis and say the backend issue has to be filed by hand.
+            4. Create a branch named claude/issue-${{ github.event.issue.number }}-<short-slug> and make the smallest change that fixes the issue. Follow CLAUDE.md.
+            5. Build and run the relevant tests before committing:
                - iOS app: set -o pipefail && xcodebuild test -project animango.xcodeproj -scheme animango -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.2' -only-testing:animangoTests CODE_SIGNING_ALLOWED=NO
                - Chrome extension: cd chrome-extension && npm ci && npm test
                Add or update a unit test that covers the fix when the code is testable. If the build or tests fail and you can't fix them, still open the PR as a draft (gh pr create --draft) and say what fails.
-            5. Commit, push the branch, and check for an existing PR with gh pr list --repo ${{ github.repository }} --head <branch> --state open. If there isn't one, run gh pr create --repo ${{ github.repository }} --base main --head <branch> --title <title> --body <body>. The body must include: Closes #${{ github.event.issue.number }}, what was wrong, what changed, how it was tested (the commands and results), and how to verify the fix on a phone once the TestFlight build arrives.
-            6. Comment on the issue with gh issue comment, linking the PR.
+            6. Commit, push the branch, and check for an existing PR with gh pr list --repo ${{ github.repository }} --head <branch> --state open. If there isn't one, run gh pr create --repo ${{ github.repository }} --base main --head <branch> --title <title> --body <body>. The body must include: Closes #${{ github.event.issue.number }}, what was wrong, what changed, how it was tested (the commands and results), and how to verify the fix on a phone once the TestFlight build arrives.
+            7. Comment on the issue with gh issue comment, linking the PR.
 
           claude_args: |
-            --allowedTools "Read,Edit,Write,Glob,Grep,Bash(git checkout:*),Bash(git switch:*),Bash(git status:*),Bash(git diff:*),Bash(git log:*),Bash(git add:*),Bash(git rm:*),Bash(git mv:*),Bash(git commit:*),Bash(git push:*),Bash(xcodebuild:*),Bash(set -o pipefail && xcodebuild:*),Bash(xcrun simctl list:*),Bash(cd chrome-extension && npm:*),Bash(npm ci:*),Bash(npm test:*),Bash(npm run build:*),Bash(node --test:*),Bash(gh issue view:*),Bash(gh issue comment:*),Bash(gh pr create:*),Bash(gh pr list:*),Bash(gh pr view:*)"
+            --allowedTools "Read,Edit,Write,Glob,Grep,Bash(git checkout:*),Bash(git switch:*),Bash(git status:*),Bash(git diff:*),Bash(git log:*),Bash(git add:*),Bash(git rm:*),Bash(git mv:*),Bash(git commit:*),Bash(git push:*),Bash(xcodebuild:*),Bash(set -o pipefail && xcodebuild:*),Bash(xcrun simctl list:*),Bash(cd chrome-extension && npm:*),Bash(npm ci:*),Bash(npm test:*),Bash(npm run build:*),Bash(node --test:*),Bash(gh issue view:*),Bash(gh issue comment:*),Bash(gh pr create:*),Bash(gh pr list:*),Bash(gh pr view:*),Bash(.github/scripts/file-backend-issue.sh:*)"
