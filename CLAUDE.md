@@ -10,7 +10,7 @@ Three independent pieces share this repo:
 - `chrome-extension/` — **KotoLens**, a standalone Chrome extension (Japanese/Korean reader using the Anthropic API). Shares no code with the iOS app.
 - `docs/` — static GitHub Pages site (app support page, KotoLens landing and privacy pages).
 
-The Python/FastAPI backend described in `DESIGN.md` is **not** in this repo; the iOS app only talks to it over HTTP.
+The Python/FastAPI backend and content pipeline described in `DESIGN.md` live in the private repo `Try-Look-Software/animango-backend`. The iOS app only talks to it over HTTP, and pushes to that repo's `main` deploy to the server automatically.
 
 `DESIGN.md` is the system design doc (data models, 3-tier content fallback, data flows, backend pipeline). It predates some features (Gemini provider, translation, deep word analysis), so verify it against the code.
 
@@ -88,7 +88,7 @@ Neither workflow uses secrets.
 
 Bug fixes flow from an issue to the App Store through three more workflows:
 
-- `.github/workflows/claude-fix-issue.yml` runs Claude on `macos-26` for every new issue from someone with write access (issues that mention `@claude` go to `claude.yml` instead). It sets `prompt`, which runs the action in agent mode: Claude fixes the issue on a `claude/issue-N-*` branch, runs the build and tests, opens a PR with `Closes #N`, and links it on the issue. If the issue is unclear, it asks on the issue instead.
+- `.github/workflows/claude-fix-issue.yml` runs Claude on `macos-26` for every new issue from someone with write access (issues that mention `@claude` go to `claude.yml` instead). It sets `prompt`, which runs the action in agent mode: Claude first triages the issue against a read-only checkout of the backend in `.backend/` (git-ignored) and decides whether the fix belongs here, in the backend, or both. App fixes go on a `claude/issue-N-*` branch: Claude runs the build and tests, opens a PR with `Closes #N`, and links it on the issue. Backend fixes are filed as an issue in `animango-backend` through `.github/scripts/file-backend-issue.sh`, the agent's only cross-repo access. That repo's own agent opens the PR, which closes the wakatta issue when it's backend-only, and merging deploys it. The checkout and the script use the `BACKEND_REPO_TOKEN` secret, a fine-grained token limited to `animango-backend` (Contents: read, Issues: read and write); without it Claude triages from this repo alone. If the issue is unclear, Claude asks on the issue instead.
 - `.github/workflows/testflight.yml` archives the `animango` scheme and uploads it to TestFlight on every push to `main` that changes iOS files, and can be run by hand. The build number is a UTC timestamp (`YYYYMMDDHHMM`) passed as `CURRENT_PROJECT_VERSION` at archive time; the committed value stays as it is.
 - `.github/workflows/app-store-submit.yml` is run by hand. It uses fastlane `deliver` to submit a TestFlight build of the current `MARKETING_VERSION` for review, with automatic release on approval. Once that version is approved, TestFlight rejects new uploads for it, so start the next release before merging more fixes. This workflow doesn't create a release tag; tag only when the user says the version shipped.
 
